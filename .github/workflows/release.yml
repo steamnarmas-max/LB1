@@ -33,6 +33,19 @@ jobs:
       - name: Build
         run: cmake --build build --config Release
 
+      - name: Copy Boost DLL (Windows)
+        if: matrix.os == 'windows-2022'
+        shell: pwsh
+        run: |
+          $root = "${{ steps.install-boost.outputs.BOOST_ROOT }}"
+          $dll = Get-ChildItem -Path $root -Recurse -Filter "boost_unit_test_framework*.dll" | Select-Object -First 1
+          if (-not $dll) {
+            Write-Error "Boost.Test DLL not found under $root"
+            exit 1
+          }
+          Copy-Item $dll.FullName -Destination "build/Release/"
+          Write-Host "Copied $($dll.Name) to build/Release/"
+
       - name: Test
         timeout-minutes: 5
         run: ctest --test-dir build -C Release --output-on-failure --verbose
