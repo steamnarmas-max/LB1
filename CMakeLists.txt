@@ -22,11 +22,7 @@ target_include_directories(helloworld
     PRIVATE "${CMAKE_BINARY_DIR}"
 )
 
-if(WIN32)
-    target_compile_definitions(test_version PRIVATE BOOST_TEST_STATIC_LINK)
-else()
-    target_compile_definitions(test_version PRIVATE BOOST_TEST_DYN_LINK)
-endif()
+target_compile_definitions(test_version PRIVATE BOOST_TEST_DYN_LINK)
 
 target_link_libraries(helloworld_cli PRIVATE
     helloworld
