@@ -1,4 +1,4 @@
-name: 'C++ CI'
+name: C++ CI
 
 on:
   push:
@@ -11,11 +11,8 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
-    
     runs-on: ${{ matrix.os }}
-    
-    permissions:
-      contents: write
+    permissions: write-all
 
     steps:
       - uses: actions/checkout@v4
@@ -43,13 +40,34 @@ jobs:
         run: cmake --build build --target package --config Release
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
-        if: github.ref == 'refs/heads/main' # Релиз создается только при пуше в main
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ github.run_number }}
-          name: Release ${{ github.run_number }}
+          release_name: Release ${{ github.run_number }}
           draft: false
           prerelease: false
-          files: |
-            build/*.deb
-            build/*.zip
+
+      - name: Upload Release Asset (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./build/helloworld-0.0.${{ github.run_number }}-Linux.deb
+          asset_name: helloworld-0.0.${{ github.run_number }}-Linux.deb
+          asset_content_type: application/vnd.debian.binary-package
+
+      - name: Upload Release Asset (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./build/helloworld-0.0.${{ github.run_number }}-win64.zip
+          asset_name: helloworld-0.0.${{ github.run_number }}-win64.zip
+          asset_content_type: application/zip
