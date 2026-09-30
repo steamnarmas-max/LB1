@@ -34,7 +34,8 @@ jobs:
         run: cmake --build build --config Release
 
       - name: Test
-        run: cmake --build build --target test --config Release
+        run: ctest --test-dir build -C Release --output-on-failure
+        timeout-minutes: 5
 
       - name: Package
         run: cmake --build build --target package --config Release
