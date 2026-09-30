@@ -1,4 +1,4 @@
-name: C++ CI
+name: 'C++ CI'
 
 on:
   push:
@@ -12,13 +12,14 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    permissions: write-all
+    
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
-
       - name: Install Boost (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install libboost-test-dev -y
@@ -33,55 +34,20 @@ jobs:
       - name: Build
         run: cmake --build build --config Release
 
-      - name: Copy Boost DLL (Windows)
-        if: matrix.os == 'windows-2022'
-        shell: pwsh
-        run: |
-          $root = "${{ steps.install-boost.outputs.BOOST_ROOT }}"
-          $dll = Get-ChildItem -Path $root -Recurse -Filter "boost_unit_test_framework*.dll" | Select-Object -First 1
-          if (-not $dll) {
-            Write-Error "Boost.Test DLL not found under $root"
-            exit 1
-          }
-          Copy-Item $dll.FullName -Destination "build/Release/"
-          Write-Host "Copied $($dll.Name) to build/Release/"
-
       - name: Test
-        timeout-minutes: 5
-        run: ctest --test-dir build -C Release --output-on-failure --verbose
+        run: cmake --build build --target test --config Release
 
       - name: Package
         run: cmake --build build --target package --config Release
 
       - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v1
+        if: github.ref == 'refs/heads/main' # Релиз создается только при пуше в main
         with:
           tag_name: ${{ github.run_number }}
-          release_name: Release ${{ github.run_number }}
+          name: Release ${{ github.run_number }}
           draft: false
           prerelease: false
-
-      - name: Upload Release Asset (Ubuntu)
-        if: matrix.os == 'ubuntu-latest'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./build/helloworld-0.0.${{ github.run_number }}-Linux.deb
-          asset_name: helloworld-0.0.${{ github.run_number }}-Linux.deb
-          asset_content_type: application/vnd.debian.binary-package
-
-      - name: Upload Release Asset (Windows)
-        if: matrix.os == 'windows-latest'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./build/helloworld-0.0.${{ github.run_number }}-win64.zip
-          asset_name: helloworld-0.0.${{ github.run_number }}-win64.zip
-          asset_content_type: application/zip
+          files: |
+            build/*.deb
+            build/*.zip
