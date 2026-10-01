@@ -1,74 +1,79 @@
-name: C++ CI
+name: 'C++ CI'
 
 on:
   push:
     branches:
       - main
-      - feature/github_actions
+      - lab-1
 
 jobs:
   build:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
+
     runs-on: ${{ matrix.os }}
     permissions: write-all
-
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v3
         with:
           submodules: true
 
-      - name: Install Boost (Ubuntu)
+      - name: Install Linux Dependencies
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install libboost-test-dev -y
-
-      - name: Install Boost (Windows)
+        
+      - name: Install Windows Dependencies
         if: matrix.os == 'windows-latest'
-        run: choco install boost-msvc-14.3 -y
-
-      - name: Configure CMake
-        run: cmake -B build -DPATCH_VERSION=${{ github.run_number }}
+        run: vcpkg install boost-test
+        
+      - name: Configure CMake Linux
+        if: matrix.os != 'windows-latest'
+        run: "cmake -B build -DPATCH_VERSION=${{ github.run_number }} \
+              -DCMAKE_BUILD_TYPE=Release"
+              
+      - name: Configure CMake Windows
+        if: matrix.os == 'windows-latest'
+        run: "cmake -B build -DPATCH_VERSION=${{ github.run_number }} \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
 
       - name: Build
         run: cmake --build build --config Release
 
       - name: Test
-        run: ctest --test-dir build -C Release --output-on-failure
-        timeout-minutes: 5
+        working-directory: ${{ github.workspace }}/build
+        run: ctest -C Release --output-on-failure
 
       - name: Package
-        run: cmake --build build --target package --config Release
+        run: cmake --build build --config Release --target package
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ github.run_number }}
-          release_name: Release ${{ github.run_number }}
+          name: packages-${{ matrix.os }}
+          path: |
+            build/*.deb
+            build/*.msi
+            build/*.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions: write-all
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Create and Upload Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.0.${{ github.run_number }}
+          name: Release 0.0.${{ github.run_number }}
           draft: false
           prerelease: false
-
-      - name: Upload Release Asset (Ubuntu)
-        if: matrix.os == 'ubuntu-latest'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./build/helloworld-0.0.${{ github.run_number }}-Linux.deb
-          asset_name: helloworld-0.0.${{ github.run_number }}-Linux.deb
-          asset_content_type: application/vnd.debian.binary-package
-
-      - name: Upload Release Asset (Windows)
-        if: matrix.os == 'windows-latest'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./build/helloworld-0.0.${{ github.run_number }}-win64.zip
-          asset_name: helloworld-0.0.${{ github.run_number }}-win64.zip
-          asset_content_type: application/zip
+          files: |
+            ./artifacts/packages-ubuntu-latest/*
+            ./artifacts/packages-windows-latest/*
